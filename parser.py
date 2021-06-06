@@ -9,7 +9,7 @@ import json
 ruas = dict()
 
 def excelToCSV():
-    read_file = pd.read_excel('dataset-original.xlsx', engine='openpyxl', nrows= 419)
+    read_file = pd.read_excel('dataset-original.xlsx', engine='openpyxl', nrows= 421)
     read_file.to_csv (r'dataset.csv', encoding='utf-8', index = None, header=False)
 
 def createDataset():
