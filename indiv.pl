@@ -16,51 +16,13 @@
 %-----------------------------------------------
 :- include('baseConhecimento.pl').
 :- include('grafo.pl').
+:- include('auxs.pl').
 :- use_module(library(lists)).
 %-----------------------------------------------
 
-%-----------------------------------------------
-% -- Auxiliares --
+% Gerar os circuitos de recolha
 
-nao( Questao ) :-
-    Questao, !, fail. 
-nao( Questao ).
-
-membro(X, [X|_]).
-membro(X, [_|Xs]):-
-	membro(X, Xs).
-
-membrochk(X,[X|_]) :- !.
-membrochk(X,[_|T]):- membrochk(X,T).
-
-
-% Concatena listas 
-concat(List1, List2, Result):-
-   append(List1, List2, Result).
-
-% Comprimento de uma lista
-compLista([H],R) :- R=1.
-compLista([H|T],R) :- compLista(T,O), R is O + 1.
-
-solucoes( X,Y,Z ) :- findall( X,Y,Z ).
-
-repetidos([],[]).
-repetidos([X|L],[X|NL]) :- removerElem(L,X,TL), repetidos(TL,NL).
-
-removerElem([],_,[]).
-removerElem([X|L],X,NL) :- removerElem(L,X,NL).
-removerElem([X|L],Y,[X|NL]) :- X \== Y, removerElem(L,Y,NL).
-
-%-----------------------------------------------
-
-% Verifica se dois nodos sao adjacente
-adjacente(X,Y,grafo(_,L_arestas)) :- member(aresta(X,Y),L_arestas).
-
-% Calcula a distancia entre dois nodos
-distancia(Lat1,Lon1,Lat2,Lon2,D):- N is sqrt((Lat2-Lat1)^2+(Lon2-Lon1)^2),N=D.
-
-% Caminho entre dois nodos
-
+% -- Caminho entre nodos --
 caminho(G,X,Y,C):-
     caminhoAux(G,X,[Y],C).
 
@@ -68,7 +30,24 @@ caminhoAux(_,X,[X|T],[X|T]).
 caminhoAux(G,X,[Y|T],P) :-
     adjacente(Prox_nodo,Y,G), nao(membro(Prox_nodo,[Y|T])), caminhoAux(G,X,[Prox_nodo,Y|T],P).
 
-% Depth First
+% -- Caminho com a distancia percorrida --
+caminhoK(G,A,B,P,D) :-
+  caminhoAuxK(G,A,[B],P,D).
+
+caminhoAuxK(G,A,[A|P1],[A|P],0,[]).
+
+caminhoAuxK(G,A,[Y|P1],P,D1) :-
+  adjacente(X,Y,Di,G),
+  nao(membro(X,[Y|P1])),
+  distanciaEntreNodos(X,Y,Di),
+  caminhoAuxK(G,A,[X,Y|P1],P,K),
+  D1 is D + Di.
+
+% Todos os circuitos entre dois nodos
+
+allCircuitos(G,X,Y,R):- solucoes(C,dFirst(G,X,Y,C),R).
+
+% -- Gerar circuitos com Depth First --
 
 dFirst(G,X,Y,R) :- dFirst(G,X,Y,[X],R).
 
@@ -81,91 +60,146 @@ dFirst(G,X,Y,V,[aresta(X,Z)|R]) :-
  dFirst(G,Z,Y,[Z|V],R),
  Z \= Y.
 
-% Breadth First
+% T
+test_dFirst(R) :- g(G), getIdGaragem(Gar), getIdDeposicao(D), 
+				dfFirst(G,Gar,D,R).
 
-bFirst(G,X,Y,Visited) :-   bFirst3(G,Y,Successors, 			
-							[],						   
-							RevVisited),
-							sucessor(G,X,Successors),  
-							inverso(RevVisited, Visited).
+% -- Gerar circuitos com Breadth First --
 
-bFirst3(G,Y,[], History, []). 						
+bFirst(G,X,Y,Visited) :- bFirstAux(G,Y,Successors, 			
+					[],						    
+					RevVisited),
+					sucessor(G,X,Successors),  
+					inverso(RevVisited, Visited).
 
-bFirst3(G,Y,[aresta(P,Y)|_], History, [aresta(P,Y)|History]).
+bFirstAux(G,Y,[], History, []).						
 
-bFirst3(G,Y,[aresta(X,Z)|RestQ], History, RevVisited) :-
-						sucessor(G,Z,Cats),			 
-						append(RestQ, Cats, Queue),					
-						bFirst3(G,Y, Queue, [aresta(X,Z)|History], RevVisited).
+bFirstAux(G,Y,[aresta(P,Y)|_], History, [aresta(P,Y)|History]).
 
+bFirstAux(G,Y,[aresta(X,Z)|RestQ], History, RevVisited) :- sucessor(G,Z,Cats),			 
+													addElement(RestQ, Cats, Queue),					
+													bFirstAux(G,Y, Queue, [aresta(X,Z)|History], RevVisited).
 
-% ---- Gerar os circuitos de recolha indeferenciada e seletiva ----
+% Seletiva
 
-% Tipo de residuo
-tipoLixo(aresta(X,Y,_)) :- ponto(_,_,_,X,_,'Lixo',_,_,_,_), ponto(_,_,_,Y,_,'Lixo',_,_,_,_).
-tipoPapelCartao(aresta(X,Y,_)) :- ponto(_,_,_,X,_,'Papel e Cartão',_,_,_,_), ponto(_,_,_,Y,_,'Papel e Cartão',_,_,_,_).
-tipoOrganicos(aresta(X,Y,_)) :- ponto(_,_,_,X,_,'Organicos',_,_,_,_), ponto(_,_,_,Y,_,'Organicos',_,_,_,_).
-tipoVidro(aresta(X,Y,_)) :- ponto(_,_,_,X,_,'Vidro',_,_,_,_), ponto(_,_,_,Y,_,'Vidro',_,_,_,_).
-tipoEmbalagens(aresta(X,Y,_)) :- ponto(_,_,_,X,_,'Embalagens',_,_,_,_), ponto(_,_,_,Y,_,'Embalagens',_,_,_,_).
+% Através da depthFirst para pontos que tenham um tipo especifico de residuos (circuitos de recolha seletiva)
 
-% Através da depthFirst para pontos com o mesmo tipo de residuos
+pontoTipo(aresta(X,Y),T) :- ponto(_,_,_,X,Tp,_,_,_,Ctotal), ponto(_,_,_,Y,Tp,_,_,_,Ctotal).
 
-% Printa todas os nodos do grafo
-todosNodos(R) :- g(G),
-				G = grafo(N,_),
-				R = N.
+dFTipo(G,T,X,Y,P) :- dFTipo(G,T,X,Y,[X],P).
 
-% Obter todas as arestas do grafo com nodos de um certo tipo de residuo
-todasArestasTipo(T,R) :- g(G),
-					G = grafo(_,L_arestas),
-					A = L_arestas,
-					solucoes(aresta(X,Y),(member((aresta(X,Y)),A),ponto(_,_,_,X,T,_,_,_,_),ponto(_,_,_,Y,T,_,_,_,_),X\=Y),S),
-					repetidos(S,R).
+dFTipo(G,T,X,Y,V,[aresta(X,Y)]) :- adjacente(X,Y,G),
+								pontoTipo(aresta(X,Y),T).
 
-% Obter todas as arestas do grafo
-
-todasArestas(R) :- g(G),
-					G = grafo(_,L_arestas),
-					R = L_arestas.
-
-
-% Devolve os pontos do ponto inicial de uma aresta
-edgePoints(aresta(X,_),R):- solucoes(ponto(Lat,Lon,O,X,T,Ct,Ccap,Cqt,Ctotal),ponto(Lat,Lon,O,X,T,Ct,Ccap,Cqt,Ctotal),R).
-
-% Diz se passa por um ponto que tem lixos
-lixos(ponto(_,_,_,_,'Lixos',_,_,_,_)).
-
-% Usar a depth first para os que fazem recolha de lixo
-
-dFP(G,X,Y,R) :- dFP2(G,X,Y,[X],R).
-dFP2(G,X,Y,V,[aresta(X,Y)]) :- adjacente(X,Y,G), edgePoints(aresta(X,Y),P), P=[H|T], lixos(H).
-
-dFP2(G,X,Y,V,[aresta(X,Z)|R]) :-
+dFTipo(G,T,X,Y,V,[aresta(X,Z)|P]) :-
  adjacente(X,Z,G),
- edgePoints(aresta(X,Z),P), 
- P=[H|T],
- lixos(H),
+ pontoTipo(aresta(X,Z),T),
  \+ membrochk(aresta(X,Z),V),
  \+ membro(Z,V), 
- dFP2(G,Z,Y,[Z|V],R),
- Z \= Y.
-
-% ---- Identificar quais os circuitos com mais pontos de recolha (por tipo de residuo a recolher) ---- 
+ dFTipo(G,T,Z,Y,[Z|V],P). 
 
 
-% ---- Escolher o circuito mais rapido (criterio da distancia) ---- 
+%-----------------------------------------------
+
+% Identificar circuitos com mais pontos de recolha (por tipo de residuo)
+
+% Devolve os pontos de uma aresta se tiverem aquele tipo de residuo
+edgePointsTipo(aresta(X,_),Tp,R):- solucoes(ponto(Lat,Lon,O,X,Tp,Ct,Ccap,Cqt,Ctotal),ponto(Lat,Lon,O,X,Tp,Ct,Ccap,Cqt,Ctotal),R).
+
+nrPontosRecolhaT([],T,Count,R). 
+nrPontosRecolhaT([A],T,Count,R) :- edgePointsTipo(A,Tp,S),
+									length(S,L),
+									Count2 is Count + L,
+									nrPontosRecolhaT([],Count2,R).
+nrPontosRecolhaT([H|T],Count,T,R) :- edgePointsTipo(H,Tp,S),
+									length(S,L),
+									Count2 is Count + L,
+									nrPontosRecolhaT(T,Count2,R).
+
+% T
+teste_nrPontosRecolha(R) :- edgePointsTipo(aresta('15875','21844'),'Lixos',0,S).
+
+%-----------------------------------------------
+
+% Escolher o circuito mais rápido (criterio distancia)
+
+% DepthFirst
+dFDistancia(G,X,Y,R) :- dFDistancia(G,X,Y,[X],R,Km).
+
+dFDistancia(G,X,Y,V,[aresta(X,Y)],0) :- adjacente(X,Y,G).
+
+dFDistancia(G,X,Y,V,[aresta(X,Z)|R],D) :-
+ adjacente(X,Z,G),
+ Di = distanciaEntreNodos(X,Z),
+ \+ membrochk(aresta(X,Z),V),
+ \+ membro(Z,V), 
+ D2 = distanciaEntreNodos(Z,Y),
+ dFDistancia(G,Z,Y,[Z|V],R,D2),
+ D is D2 + Di. 
+
+% Percurso mais rapido (menor distancia)
+maisRapido(G,X,Y,P,D):-solucoes((P,C),(dFDistancia(G,X,Y,P,D),!,C=D),L),
+					  minimo(L,(P,C)), D=C. 
+
+test_maisRapido(Y,R) :- g(G), getIdGaragem(Gar), getIdDeposicao(Dep), maisRapido(G,Gar,Dep,P,D),
+				addEllement(aresta(Dep,Gar)).
+
+%-----------------------------------------------		
+
+% Comparar circuitos de recolha tendo em conta a distância média percorrida entre pontos de recolha
+
+% Calcula a distância total de um path
+calcDist([],Di,Di).
+calcDist([A],Di,Di) :- edgePoints(A,A1), [A2|T2]=A1, edgePoints2(A,B), [B1|B2]=B, 
+					distanciaEntrePontos(A2,B1,Dist2),
+					ZZ is Dist2 + Di,
+					calcDist([],ZZ,Dist).
+calcDist([A|X],Di,Dist):- edgePoints(A,A1), [A2|T2]=A1, edgePoints2(A,B), [B1|B2]=B, 
+                    distanciaEntrePontos(A2,B1,Dist2),
+                    ZZ is Dist2 + Di,
+                    calcDist(X,ZZ,Dist).
 
 
-% ---- Escolher o circuito mais eficiente (criterio da distancia) ---- 
+compararDistanciaMedia(L,R) :- compararDistanciaMediaAux(L,'0',0).
+
+compararDistanciaMediaAux([],Ci,Dm).
+compararDistanciaMediaAux([H],Ci,Dm) :- calcDist(H,0,D),
+									(D > Dm -> Dm is D, Ci is H),
+									compararDistanciaMediaAux([],Ci,Dm).
+compararDistanciaMediaAux([H|T],Ci,Dm) :- calcDist(H,0,D),
+									(D > Dm -> Dm is D, Ci is H),
+									compararDistanciaMediaAux(T,Ci,Dm).
+
+test_compararDistanciaMedia(G,R) :- getIdGaragem(Gar), getIdDeposicao(D), g(G),
+								allCircuitos(G,Gar,D,L),
+								compararDistanciaMedia(L,R).
+
+%-----------------------------------------------
+
+% Comparar circuitos de recolha tendo em conta a quantidade recolhida
+
+compararQtRecolhida(L,R) :- compararQtRecolhidaAux(L,'0',0).
+
+compararQtRecolhidaAux([],Sum,R).
+compararQtRecolhidaAux([H],Sum,R) :- edgePoints(H,E),
+							somarQuantidadesRecolhidas(H,0,S),
+							Sum2 = Sum + S,
+							compararQtRecolhidaAux([],Sum2,R).
+compararQtRecolhidaAux([H|T],Sum,R) :- edgePoints(H,E),
+							somarQuantidadesRecolhidas(H,0,S),
+							Sum2 = Sum + S,
+							compararQtRecolhidaAux(T,Sum2,R).
+
+somarQuantidadesRecolhidas([],Sum,R).
+somarQuantidadesRecolhidas([A],Sum,R) :- ponto(Lat,Lon,O,X,T,Ct,Ccap,Cqt,Ctotal) = A,
+							Sum2 = Sum + Ctotal,
+							somarQuantidadesRecolhidas([],Sum2,R).
+somarQuantidadesRecolhidas([H|T],Sum,R) :- ponto(Lat,Lon,O,X,T,Ct,Ccap,Cqt,Ctotal) = H,
+							Sum2 = Sum + Ctotal,
+							somarQuantidadesRecolhidas(T,Sum2,R).
 
 
 
-% TESTES
-% myprog(X,Y) :- g(G), adjacente(X,Y,G).
-% myTestProg(ponto(Lat1,Lon1,_,_,_,_,_,_,_),ponto(Lat2,Lon2,_,_,_,_,_,_,_),D) :- distancia(Lat1,Lon1,Lat2,Lon2,D).
-%myTestProg(X,Y,C) :- g(G), caminho(G,X,Y,C).
-%myTestProg(X,Y,R) :- g(G), dFirst(G,X,Y,R).
-%myTestProg(X,Y,R) :- g(G), bFirst(G,X,Y,R).
-%myTestProg(R) :- todasArestasTipo('Organicos',R).
-myTestProg(R) :- g(G), dFP(G,'15849','15820',R).
-%myTestProg(R) :- P=[1,2,3,4], P=[H|T], R=H.
+
+
+
